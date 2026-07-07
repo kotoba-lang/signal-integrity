@@ -1,23 +1,39 @@
 (ns signal-integrity
   "KAMI Signal Integrity — transmission line analysis, eye diagram
-  generation, crosstalk analysis, and S-parameter extraction. Restored
-  from the legacy kami-engine/kami-si Rust crate (deleted in
-  kotoba-lang/kami-engine PR #82 'Remove Rust workspace from
-  kami-engine') as part of the clj-wgsl migration (ADR-2607010930,
-  com-junkawasaki/root).
+  generation, crosstalk analysis, and S-parameter extraction.
 
-  Named `signal-integrity` (not `si`) for clarity — the ledger's original
-  short-hand note 'SI units' for this crate was ambiguous/wrong (this is
-  Signal Integrity, an EDA discipline, not the physical SI unit system;
-  same class of correction as the kami-dft 'DFT' ambiguity).
+  Ported from the retired Rust `kami-si` crate
+  (`orgs/kotoba-lang/kami-engine`, deleted-but-uncommitted working tree)
+  into pure `.cljc`, per ADR-2607010000. Pure data + pure functions
+  throughout; no network, no I/O, no GPU. See README for what was
+  intentionally not ported.
 
-  One namespace per original Rust module:
-    signal-integrity.transmission-line — microstrip/stripline/coplanar Z0 calc
-    signal-integrity.eye-diagram       — eye diagram waveform + quality metrics
-    signal-integrity.crosstalk         — near/far-end crosstalk between traces
-    signal-integrity.s-param           — S-parameters + Touchstone .s2p export
+  ## Shared vocabulary across `signal-integrity.*`
 
-  Zero-dep portable CLJC — pure data + pure functions, no IO/GPU.
-  `eye-diagram`'s deterministic LCG PRNG uses u64-wraparound arithmetic
-  (JVM `unchecked-*` ops on `long`, same bit pattern as Rust's
-  `wrapping_mul`/`wrapping_add`).")
+  * transmission-line parameters — a plain map with namespaced keys
+    `:tline/z0-ohm` `:tline/delay-ps-per-mm` `:tline/loss-db-per-mm`
+    `:tline/length-mm`, produced by
+    `signal-integrity.transmission-line/calculate-z0`.
+  * transmission-line geometry — a plain map with `:tline-type/kind`
+    (`:microstrip` `:stripline` `:coplanar`) plus that kind's
+    geometry fields, built by `signal-integrity.transmission-line/microstrip`
+    / `stripline` / `coplanar`.
+
+  ## Submodules
+
+  * `signal-integrity.constants` — physical/empirical constants for the
+    domain namespaces below, loaded from
+    `resources/signal_integrity/constants.edn`.
+  * `signal-integrity.math` — cross-platform (JVM/cljs) math primitives
+    shared by the domain namespaces below.
+  * `signal-integrity.transmission-line` — characteristic impedance,
+    propagation delay, and loss for microstrip / stripline / coplanar
+    waveguide geometry.
+  * `signal-integrity.crosstalk` — near-end (backward/NEXT) and far-end
+    (forward/FEXT) crosstalk coupling between adjacent transmission
+    lines.
+  * `signal-integrity.eye-diagram` — eye-diagram waveform sample
+    generation and quality metrics (height, width, jitter, BER
+    estimate) for serial link analysis.
+  * `signal-integrity.s-param` — 2-port S-parameter summary metrics and
+    Touchstone `.s2p` export.")

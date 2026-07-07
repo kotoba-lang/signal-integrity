@@ -1,49 +1,96 @@
 (ns signal-integrity.s-param
   "S-parameter representation and Touchstone export for 2-port networks.
-  Restored from kami-si's `s_param` module (deleted PR #82). Each
-  S-parameter entry is a `[magnitude phase-degrees]` pair.")
+  Ported from kami-si's `s_param.rs` (kotoba-lang/kami-engine, retired
+  Rust crate, ADR-2607010000). No network, no I/O."
+  (:require [signal-integrity.math :as math]))
 
-(defn s-parameter [freq-ghz s11 s21 s12 s22]
-  {:freq-ghz freq-ghz :s11 s11 :s21 s21 :s12 s12 :s22 s22})
+(defn s-parameter
+  "Build a 2-port S-parameter map across frequency.
 
-(defn s-param-metrics [insertion-loss-db return-loss-db bandwidth-3db-ghz]
-  {:insertion-loss-db insertion-loss-db :return-loss-db return-loss-db :bandwidth-3db-ghz bandwidth-3db-ghz})
-
-(defn- db20 [mag] (* 20.0 (/ (Math/log mag) (Math/log 10.0))))
+  `freq-ghz` — frequency points in GHz.
+  `s11`/`s21`/`s12`/`s22` — per-frequency `[magnitude phase-deg]` pairs
+  (input reflection / forward transmission / reverse transmission /
+  output reflection)."
+  [{:keys [freq-ghz s11 s21 s12 s22]}]
+  {:sparam/freq-ghz freq-ghz
+   :sparam/s11 s11
+   :sparam/s21 s21
+   :sparam/s12 s12
+   :sparam/s22 s22})
 
 (defn metrics
-  "Summary metrics from S-parameter data: worst-case insertion loss (S21
-  dB), worst-case return loss (S11 dB), and 3dB bandwidth (first
-  frequency where |S21| drops 3dB from DC)."
-  [sparam]
-  (let [insertion-loss-db (reduce min ##Inf (map (fn [[mag _]] (db20 mag)) (:s21 sparam)))
-        return-loss-db (reduce min ##Inf (map (fn [[mag _]] (- (db20 mag))) (:s11 sparam)))
-        s21-db-0 (if-let [[mag _] (first (:s21 sparam))] (db20 mag) 0.0)
-        bandwidth-3db-ghz (or (some (fn [[f [mag _]]] (when (< (db20 mag) (- s21-db-0 3.0)) f))
-                                     (map vector (:freq-ghz sparam) (:s21 sparam)))
-                               (last (:freq-ghz sparam))
-                               0.0)]
-    (s-param-metrics insertion-loss-db return-loss-db bandwidth-3db-ghz)))
+  "Compute summary metrics from S-parameter data `sparam` (a map built by
+  [[s-parameter]]).
 
-(defn- fmt-e6 [x]
-  #?(:clj (format "%.6e" (double x))
-     :cljs (.toExponential (double x) 6)))
-(defn- fmt-3 [x]
-  #?(:clj (format "%.3f" (double x))
-     :cljs (.toFixed (double x) 3)))
+  Returns `:sparam-metrics/insertion-loss-db` (worst-case |S21| in dB),
+  `:sparam-metrics/return-loss-db` (worst-case |S11| return loss in dB),
+  and `:sparam-metrics/bandwidth-3db-ghz` (first frequency where |S21|
+  drops 3dB from its DC value)."
+  [sparam]
+  (let [{:sparam/keys [freq-ghz s11 s21]} sparam
+        insertion-loss-db (transduce (map (fn [[mag _]] (* 20.0 (math/log10 mag))))
+                                      min ##Inf s21)
+        return-loss-db (transduce (map (fn [[mag _]] (* -20.0 (math/log10 mag))))
+                                   min ##Inf s11)
+        s21-db-0 (if-let [[mag _] (first s21)]
+                   (* 20.0 (math/log10 mag))
+                   0.0)
+        bandwidth-3db-ghz (or (some (fn [[f [mag _]]]
+                                       (when (< (* 20.0 (math/log10 mag)) (- s21-db-0 3.0))
+                                         f))
+                                     (map vector freq-ghz s21))
+                               (last freq-ghz)
+                               0.0)]
+    {:sparam-metrics/insertion-loss-db insertion-loss-db
+     :sparam-metrics/return-loss-db return-loss-db
+     :sparam-metrics/bandwidth-3db-ghz bandwidth-3db-ghz}))
+
+(defn- fmt-fixed
+  "Format `x` with `n` decimal places, matching Rust's `{:.N}`."
+  [x n]
+  #?(:clj (format (str "%." n "f") (double x))
+     :cljs (.toFixed x n)))
+
+(defn- round6
+  "Round non-negative `x` to 6 decimal places (used to detect when
+  fixed-point rounding of the mantissa carries to `10.000000`)."
+  [x]
+  (/ (math/floor (+ (* x 1000000.0) 0.5)) 1000000.0))
+
+(defn- fmt-exp6
+  "Format `x` as Rust's `{:.6e}`: a 6-fractional-digit mantissa and an
+  unpadded, unsigned-for-positive exponent (e.g. `1.000000e-1`,
+  `9.800000e-1`, `2.000000e1`) — distinct from Java's `%e`, which always
+  signs and zero-pads the exponent."
+  [x]
+  (if (zero? x)
+    "0.000000e0"
+    (let [neg? (neg? x)
+          ax (math/abs x)
+          exp0 (long (math/floor (math/log10 ax)))
+          mantissa0 (/ ax (math/pow 10.0 exp0))
+          ;; Guard rounding of the fixed-point mantissa up to "10.000000".
+          bumped? (>= (round6 mantissa0) 10.0)
+          [mantissa exp] (if bumped? [(/ mantissa0 10.0) (inc exp0)] [mantissa0 exp0])]
+      (str (when neg? "-") (fmt-fixed mantissa 6) "e" exp))))
+
+(defn- row-str
+  [freq [s11m s11p] [s21m s21p] [s12m s12p] [s22m s22p]]
+  (str (fmt-exp6 freq) "  "
+       (fmt-exp6 s11m) " " (fmt-fixed s11p 3) "  "
+       (fmt-exp6 s21m) " " (fmt-fixed s21p 3) "  "
+       (fmt-exp6 s12m) " " (fmt-fixed s12p 3) "  "
+       (fmt-exp6 s22m) " " (fmt-fixed s22p 3) "\n"))
 
 (defn export-touchstone
-  "Export S-parameter data in Touchstone .s2p format (Version 1): `# GHz S
-  MA R 50` header followed by frequency-ordered rows of `freq S11_mag
-  S11_phase S21_mag S21_phase S12_mag S12_phase S22_mag S22_phase`."
+  "Export S-parameter data `sparam` (a map built by [[s-parameter]]) in
+  Touchstone `.s2p` format (Version 1).
+
+  Format: `# GHz S MA R 50` header followed by frequency-ordered rows of
+  `freq S11_mag S11_phase S21_mag S21_phase S12_mag S12_phase S22_mag S22_phase`."
   [sparam]
-  (str "! Touchstone .s2p generated by kami-si\n"
-       "# GHz S MA R 50\n"
-       (apply str
-              (map (fn [freq [s11m s11p] [s21m s21p] [s12m s12p] [s22m s22p]]
-                     (str (fmt-e6 freq) "  "
-                          (fmt-e6 s11m) " " (fmt-3 s11p) "  "
-                          (fmt-e6 s21m) " " (fmt-3 s21p) "  "
-                          (fmt-e6 s12m) " " (fmt-3 s12p) "  "
-                          (fmt-e6 s22m) " " (fmt-3 s22p) "\n"))
-                   (:freq-ghz sparam) (:s11 sparam) (:s21 sparam) (:s12 sparam) (:s22 sparam)))))
+  (let [{:sparam/keys [freq-ghz s11 s21 s12 s22]} sparam]
+    (apply str
+           "! Touchstone .s2p generated by signal-integrity\n"
+           "# GHz S MA R 50\n"
+           (map row-str freq-ghz s11 s21 s12 s22))))

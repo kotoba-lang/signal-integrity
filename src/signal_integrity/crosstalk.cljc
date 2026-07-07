@@ -1,34 +1,73 @@
 (ns signal-integrity.crosstalk
-  "Crosstalk analysis between adjacent transmission lines. Restored from
-  kami-si's `crosstalk` module (deleted PR #82).")
+  "Crosstalk analysis between adjacent transmission lines. Ported from
+  kami-si's `crosstalk.rs` (kotoba-lang/kami-engine, retired Rust crate,
+  ADR-2607010000). No network, no I/O."
+  (:require [signal-integrity.constants :as constants]
+            [signal-integrity.math :as math]))
 
-(def coupling-types #{:forward :backward})
+(def ^:private spacing-decay-mm (:crosstalk/spacing-decay-mm constants/constants))
+(def ^:private backward-coefficient (:crosstalk/backward-coefficient constants/constants))
+(def ^:private forward-coefficient (:crosstalk/forward-coefficient constants/constants))
+(def ^:private driver-source-impedance-ohm
+  (:crosstalk/driver-source-impedance-ohm constants/constants))
+(def ^:private driver-amplitude-mv (:crosstalk/driver-amplitude-mv constants/constants))
+(def ^:private saturation-floor-mm (:crosstalk/saturation-floor-mm constants/constants))
 
-(defn crosstalk-result [victim-net aggressor-net coupling-type peak-mv width-ps]
-  {:victim-net victim-net :aggressor-net aggressor-net :coupling-type coupling-type
-   :peak-mv peak-mv :width-ps width-ps})
+(defn crosstalk-result
+  "Build a crosstalk result map."
+  [{:keys [victim-net aggressor-net coupling-type peak-mv width-ps]}]
+  {:crosstalk/victim-net victim-net
+   :crosstalk/aggressor-net aggressor-net
+   :crosstalk/coupling-type coupling-type
+   :crosstalk/peak-mv peak-mv
+   :crosstalk/width-ps width-ps})
 
 (defn analyze-crosstalk
-  "Analyze crosstalk coupling between a `victim` and `aggressor`
-  transmission line (`TLineParams` maps). Uses a simplified capacitive/
-  inductive coupling model: backward (near-end) crosstalk depends on
-  coupling length relative to signal rise time; forward (far-end)
-  crosstalk depends on the difference in inductive and capacitive
-  coupling coefficients. Returns the dominant coupling result."
+  "Analyze crosstalk coupling between a victim and aggressor transmission
+  line. `victim`/`aggressor` are `:tline/*` parameter maps (see
+  `signal-integrity.transmission-line/calculate-z0`); `coupling-length-mm`
+  and `spacing-mm` describe the coupled-line geometry; `rise-time-ps` is
+  the aggressor signal's rise time.
+
+  Uses a simplified capacitive/inductive coupling model. Backward
+  (near-end, NEXT) crosstalk depends on coupling length relative to
+  signal rise time; forward (far-end, FEXT) crosstalk depends on the
+  difference in inductive and capacitive coupling coefficients. Returns
+  a `:crosstalk/*`-keyed map for whichever coupling type dominates
+  (`:crosstalk/coupling-type` is `:backward` or `:forward`)."
   [victim aggressor coupling-length-mm spacing-mm rise-time-ps]
-  (let [k-coupling (Math/exp (/ (- spacing-mm) 0.3))
-        td (* (:delay-ps-per-mm victim) coupling-length-mm)
-        kb (* k-coupling 0.25)
-        saturation-length (/ rise-time-ps (* 2.0 (:delay-ps-per-mm victim)))
+  (let [victim-delay (:tline/delay-ps-per-mm victim)
+        ;; Coupling coefficient decreases with spacing (simplified exponential model).
+        k-coupling (math/exp (/ (- spacing-mm) spacing-decay-mm))
+        ;; Backward crosstalk coefficient (NEXT).
+        td (* victim-delay coupling-length-mm)
+        kb (* k-coupling backward-coefficient)
+        ;; Saturation: backward crosstalk saturates when coupled length >
+        ;; rise_time / (2 * delay).
+        saturation-length (/ rise-time-ps (* 2.0 victim-delay))
         effective-kb (if (> coupling-length-mm saturation-length)
                        kb
                        (* kb (/ coupling-length-mm saturation-length)))
-        aggressor-amplitude-mv (/ (* 1000.0 (:z0-ohm aggressor)) (+ (:z0-ohm aggressor) 50.0))
+        ;; Aggressor amplitude assumed from impedance (1V driver into Z0).
+        aggressor-amplitude-mv (/ (* driver-amplitude-mv (:tline/z0-ohm aggressor))
+                                   (+ (:tline/z0-ohm aggressor) driver-source-impedance-ohm))
         backward-peak (* effective-kb aggressor-amplitude-mv)
         backward-width (* 2.0 td)
-        kf (* k-coupling 0.05 (/ coupling-length-mm (max saturation-length 0.1)))
+        ;; Forward crosstalk coefficient (FEXT) — proportional to
+        ;; coupling_length * delta(Kl-Kc).
+        kf (* k-coupling forward-coefficient
+              (/ coupling-length-mm (max saturation-length saturation-floor-mm)))
         forward-peak (* kf aggressor-amplitude-mv)
         forward-width rise-time-ps]
+    ;; Return the dominant coupling type.
     (if (>= backward-peak forward-peak)
-      (crosstalk-result "victim" "aggressor" :backward backward-peak backward-width)
-      (crosstalk-result "victim" "aggressor" :forward forward-peak forward-width))))
+      (crosstalk-result {:victim-net "victim"
+                          :aggressor-net "aggressor"
+                          :coupling-type :backward
+                          :peak-mv backward-peak
+                          :width-ps backward-width})
+      (crosstalk-result {:victim-net "victim"
+                          :aggressor-net "aggressor"
+                          :coupling-type :forward
+                          :peak-mv forward-peak
+                          :width-ps forward-width}))))
