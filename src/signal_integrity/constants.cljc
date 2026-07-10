@@ -9,7 +9,12 @@
   resource is read once at namespace load (a local, offline read of data
   shipped inside the library jar — not runtime I/O against the network or
   filesystem outside the artifact). cljs has no `clojure.java.io`/`slurp`,
-  so it inlines an equivalent literal map instead of reading the resource."
+  so it inlines an equivalent literal map instead of reading the resource.
+
+  `constants.edn` is stored as a single-entity Datomic/Datascript tx-data
+  vector (`[{:db/id -1 ...}]`) so it can be handed directly to
+  `(d/transact conn (edn/read-string (slurp f)))`; the JVM branch strips
+  that wrapper (`dissoc :db/id`) to recover the original flat map."
   #?@(:clj [(:require [clojure.edn :as edn]
                        [clojure.java.io :as io])]))
 
@@ -18,7 +23,8 @@
   `:crosstalk/*` `:eye/*`). See `resources/signal_integrity/constants.edn`
   for provenance comments tying each value back to the Rust source it was
   extracted from."
-  #?(:clj (edn/read-string (slurp (io/resource "signal_integrity/constants.edn")))
+  #?(:clj (dissoc (first (edn/read-string (slurp (io/resource "signal_integrity/constants.edn"))))
+                   :db/id)
      :cljs {:tline/trace-thickness-mm 0.035
             :tline/c-mm-per-ps 0.2998
             :tline/microstrip-loss-base 0.001
