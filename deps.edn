@@ -1,6 +1,7 @@
 {:paths ["src" "resources"]
  :deps {org.clojure/clojure {:mvn/version "1.12.0"}
-        io.github.kotoba-lang/org-ibis {:local/root "../org-ibis"}}
+        io.github.kotoba-lang/org-ibis {:git/url "https://github.com/kotoba-lang/org-ibis.git"
+                                     :git/sha "e953b7f636a7c00fdabb59b369feb2bb6cd2c427"}}
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
