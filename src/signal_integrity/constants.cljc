@@ -39,9 +39,21 @@
             :crosstalk/saturation-floor-mm 0.1
 
             :eye/samples-per-bit 64
-            :eye/lcg-seed -2401053089206496716
-            :eye/lcg-multiplier 6364136223846793005
-            :eye/lcg-increment 1442695040888963407
+            ;; :eye/lcg-seed, :eye/lcg-multiplier and :eye/lcg-increment are
+            ;; DELIBERATELY ABSENT from this ClojureScript mirror. All three
+            ;; need more than 53 bits, so a ClojureScript number cannot hold
+            ;; them: 6364136223846793005 read here is 6364136223846793000.
+            ;;
+            ;; Nothing on this runtime uses them -- `eye-diagram/next-rand`
+            ;; runs a documented 32-bit xorshift here and the LCG only on the
+            ;; JVM, and every `def` reading these keys is `#?(:clj ...)`. So
+            ;; the choice is between a rounded number and no number, and no
+            ;; number is the one that fails loudly if a caller ever appears.
+            ;;
+            ;; The EDN resource the JVM reads still carries all three; this
+            ;; mirror is deliberately not equivalent, and
+            ;; `constants-test/the-cljs-mirror-omits-what-it-cannot-hold`
+            ;; is what keeps that deliberate rather than forgotten.
             :eye/xorshift32-seed 3405691582
             :eye/center-window-start 0.35
             :eye/center-window-end 0.65
