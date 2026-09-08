@@ -2,7 +2,7 @@
   "Parity tests for `signal-integrity.s-param`, ported from the
   `#[cfg(test)]` module in kami-si's `s_param.rs` (kotoba-lang/kami-engine,
   retired Rust crate, ADR-2607010000)."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is]]
             [signal-integrity.s-param :as sp]))
 
