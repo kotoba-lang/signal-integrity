@@ -10,7 +10,7 @@
 ;; `test/signal_integrity_test.cljc` (deleted; its other assertions are
 ;; all superseded by the per-module tests ported from si). The root
 ;; `signal-integrity` namespace is docstring-only (no functions, see
-;; `src/signal_integrity.cljc`) and has no dedicated per-module test of
+;; `src/signal_integrity.cljk`) and has no dedicated per-module test of
 ;; its own in either repo, so this check lives here instead of being
 ;; lost.
 (deftest namespace-loads
