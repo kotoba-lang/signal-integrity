@@ -14,7 +14,7 @@
 ;; required is not being run. `scripts/verify-cljs-runner-completeness.cljs`
 ;; in the superproject checks this file against the tree.
 ;;
-;;   nbb --classpath "src:test:$(clojure -Spath)" test/run_portable.cljs
+;;   nbb --classpath "src:test:$(clojure -Spath)" test/run_portable.cljk
 
 (require '[cljs.test :as t]
          '[signal-integrity.constants-test]
