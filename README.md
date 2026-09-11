@@ -125,8 +125,8 @@ namespace.
 ## Testing / linting
 
 ```bash
-clojure -M:test
-clojure -M:lint
+kbb -M:test
+kbb -M:lint
 ```
 
 Status: 14 tests / 30 assertions, 0 failures, 0 errors (8 tests ported
