@@ -17,7 +17,7 @@
 
   They are now absent from the mirror instead, so such a caller gets `nil`.
   These tests are what keeps that a decision rather than an accident."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [signal-integrity.constants :as constants]))
 
 (def ^:private beyond-53-bits

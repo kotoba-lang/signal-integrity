@@ -2,7 +2,7 @@
   "Tests for `signal-integrity.ibis-adapter`, which derives
   `signal-integrity.eye-diagram/generate-eye-data` parameters from a real
   IBIS I/O buffer model (`kotoba-lang/org-ibis`'s `ibis.model`)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [ibis.model :as ibis-model]
             [signal-integrity.ibis-adapter :as adapter]))
 
