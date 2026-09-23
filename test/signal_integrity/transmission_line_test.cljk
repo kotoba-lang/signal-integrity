@@ -2,7 +2,7 @@
   "Parity tests for `signal-integrity.transmission-line`, ported from the
   `#[cfg(test)]` module in kami-si's `transmission_line.rs`
   (kotoba-lang/kami-engine, retired Rust crate, ADR-2607010000)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [signal-integrity]
             [signal-integrity.transmission-line :as tl]))
 

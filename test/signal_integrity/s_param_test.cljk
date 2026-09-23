@@ -3,7 +3,7 @@
   `#[cfg(test)]` module in kami-si's `s_param.rs` (kotoba-lang/kami-engine,
   retired Rust crate, ADR-2607010000)."
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is]]
+            [kotoba.test :refer [deftest is]]
             [signal-integrity.s-param :as sp]))
 
 (defn- sample-sparam []
