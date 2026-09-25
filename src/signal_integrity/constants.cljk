@@ -16,7 +16,7 @@
   `(d/transact conn (edn/read-string (slurp f)))`; the JVM branch strips
   that wrapper (`dissoc :db/id`) to recover the original flat map."
   #?@(:clj [(:require [clojure.edn :as edn]
-                       [clojure.java.io :as io])]))
+                       [kotoba.io :as io])]))
 
 (def constants
   "All signal-integrity constants, namespaced by domain (`:tline/*`
